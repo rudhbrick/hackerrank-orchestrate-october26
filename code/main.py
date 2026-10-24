@@ -1,9 +1,4 @@
-﻿"""Small deterministic baseline for Ghost Data Still Exists.
-
-This scaffold classifies request intent and emits contract-shaped rows. For
-requests authorizing deletion, it conservatively reports INCOMPLETE but does
-not yet build evidence-backed findings or remediation steps.
-"""
+"""Deterministic Tier 1 writer; deletion audits are explicitly placeholders."""
 from __future__ import annotations
 
 import csv
@@ -13,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DATASET = ROOT / "dataset"
 OUTPUT = ROOT / "output.csv"
+FIELDS = ["case_id", "deletion_status", "steps_json"]
 
 NON_DELETION_CUES = (
     "access my data", "access to my data", "send me my data", "export my data",
@@ -29,50 +25,43 @@ DELETION_CUES = (
 )
 
 
-def read_rows(filename: str) -> list[dict[str, str]]:
-    with (DATASET / filename).open(encoding="utf-8-sig", newline="") as f:
+def read_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(encoding="utf-8-sig", newline="") as f:
         return list(csv.DictReader(f))
 
 
 def authorizes_deletion(text: str) -> bool:
-    normalized = " ".join(text.casefold().split())
+    normalized = " ".join((text or "").casefold().split())
     if any(cue in normalized for cue in NON_DELETION_CUES):
         return False
     return any(cue in normalized for cue in DELETION_CUES)
 
 
-def main() -> None:
-    requests = read_rows("deletion_requests.csv")
-    # Load the supporting inputs so a clean run also confirms they are present
-    # and readable. Evidence interpretation is intentionally outside this stub.
-    identities = read_rows("user_identities.csv")
-    identity_history = read_rows("user_audit_log.csv")
-    activities = read_rows("system_activity.csv")
-    rules = read_rows("deletion_rules.csv")
-    evidence_manifest = read_rows("evidence_files.csv")
-    if not all((identities, identity_history, activities, rules, evidence_manifest)):
-        raise ValueError("One or more supporting dataset files are empty")
-
+def build_rows(requests: list[dict[str, str]]) -> list[dict[str, str]]:
     result = []
     for request in sorted(requests, key=lambda row: row["case_id"]):
-        if authorizes_deletion(request["request_text"]):
-            # Baseline placeholder: evidence-backed steps are not implemented.
-            status = "INCOMPLETE"
-            steps = []
-        else:
-            status = "NOT_APPLICABLE"
-            steps = []
+        status = "INCOMPLETE" if authorizes_deletion(request.get("request_text", "")) else "NOT_APPLICABLE"
         result.append({
             "case_id": request["case_id"],
             "deletion_status": status,
-            "steps_json": json.dumps(steps, ensure_ascii=False, separators=(",", ":")),
+            "steps_json": "[]",
         })
+    return result
 
-    with OUTPUT.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["case_id", "deletion_status", "steps_json"], lineterminator="\n")
+
+def write_rows(rows: list[dict[str, str]], path: Path) -> None:
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDS, lineterminator="\n")
         writer.writeheader()
-        writer.writerows(result)
-    print(f"Wrote {len(result)} rows to {OUTPUT}")
+        writer.writerows(rows)
+
+
+def main() -> None:
+    requests = read_rows(DATASET / "deletion_requests.csv")
+    rows = build_rows(requests)
+    write_rows(rows, OUTPUT)
+    print(f"Wrote {len(rows)} rows to {OUTPUT}")
+    print("WARNING: INCOMPLETE is a placeholder; no deletion evidence audit is implemented.")
 
 
 if __name__ == "__main__":

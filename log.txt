@@ -71,3 +71,156 @@ repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
 
+## [2026-10-24T16:12:45Z] Create intent evaluation set
+
+User Prompt (verbatim, secrets redacted):
+Create an eval set. Help me hand label about 30 rows, including adversarial cases such as prompt injection and ambiguous input. Build eval.py that reports accuracy, a confusion matrix, and a list of misclassified rows grouped by cause. Run it on the baseline and record the numbers in DECISIONS.md.
+
+Agent Response Summary:
+Created a 30-case hand-labeled intent eval set with adversarial, ambiguous, multilingual, mixed-intent, negated, and non-deletion requests; added eval.py and ran it against the baseline. Accuracy was 22/30 (73.3%), with confusion matrix DELETE: 17 correct/4 missed and NOT_DELETION: 5 correct/4 false positives; recorded the result and cause counts in DECISIONS.md.
+
+Actions:
+* Created code/evaluation/intent_eval.csv and code/eval.py.
+* Ran python code/eval.py and recorded metrics in DECISIONS.md.
+* Corrected UTF-8 handling in multilingual eval examples and fixed the metric table label.
+
+Context:
+tool=Codex
+model=GPT-6
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-24T17:58:01Z] Review dataset contract and trace sample
+
+User Prompt (verbatim, secrets redacted):
+Re-read problem_statement.md and every file in dataset/ end to end. Do not write or change any code. Tell me: (1) the exact inputs for one case: each file, its schema, and how records link across files; (2) the exact output format; (3) every graded criterion and how it is scored, quoting the spec; (4) how the retention policy is supplied; (5) one sample case walked through by hand from input to expected output, using sample files if they exist; (6) where our current baseline, eval set and DECISIONS.md misread or under-cover the task, since they only treat it as intent classification; (7) ambiguities in the spec as a list of questions.
+
+Agent Response Summary:
+Re-read problem_statement.md and inspected dataset schemas, all policy rows, the first public sample request/output, its linked identity, activity claim, manifest row, and referenced SQL snapshot. Read-only work only; no code or dataset files were changed. The user stopped Computer Use during visual evidence inspection, so the remaining image/PDF artifacts were not completed.
+
+Actions:
+* Read problem_statement.md and inventoried dataset files.
+* Traced sample case_01 through current identity, activity, evidence manifest, and evidence_54 SQL.
+* Inspected deletion_rules.csv and sample output format.
+* Computer Use was stopped by the user during Acrobat inspection; no further Computer Use actions were taken.
+
+Context:
+tool=Codex
+model=GPT-6
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-24T19:14:37Z] Complete read-only dataset review and PDF extraction
+
+User Prompt (verbatim, secrets redacted):
+Do not use Computer Use, the desktop, Acrobat or any GUI. Read the PDFs in dataset/ with Python only: create a virtual environment, install pymupdf (or pypdf), add it to requirements.txt, and extract the text of each PDF page by page. If a PDF returns little or no text, tell me, because it may be a scan, and do not start OCR yet. Then finish the end-to-end review you didn't complete, covering every remaining dataset file, and answer items 1-7 from my earlier prompt. Also tell me whether the PDF contents add information that is not in the CSV files, for example the retention policy.
+
+Agent Response Summary:
+Created .venv, installed pypdf 6.21.2, added the pin to requirements.txt, and extracted all four PDFs page-by-page with substantive text on every page; no OCR or GUI was used. Parsed all dataset CSV, JSON, SQL, logs and text, inspected all PNGs, and completed the requested cross-file, output, grading, retention, sample, baseline/eval, and ambiguity review without changing application code.
+
+Actions:
+* Read the PDF skill and extracted text with pypdf from the local virtual environment.
+* Parsed all participant-facing CSV/JSON/SQL/log/text records and inspected the 11 supplied images.
+* Added requirements.txt; no code or dataset files changed.
+
+Context:
+tool=Codex
+model=GPT-6
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-24T19:25:47Z] Score public samples and revise decisions
+
+User Prompt (verbatim, secrets redacted):
+Use only the shell, Python and file edits inside this repo. Do not use Computer Use, the desktop or any GUI. Ask me before installing anything or touching files outside the repo. Do not edit log.txt except through the logging protocol in AGENTS.md.
+
+I have now read problem_statement.md and AGENTS.md myself and checked your last report against them. Corrections:
+
+1. The task has three statuses, and NOT_APPLICABLE is the intent case. Our labeled data is sample_deletion_requests.csv and sample_output.csv (32 cases). Score against them and report case-level status accuracy, step-level and field-level accuracy, and sequence accuracy. The hand-labeled 30-row intent set is superseded; keep it only as a small gate check if it adds anything.
+2. DECISIONS.md must describe only what is implemented today. Move the fuller architecture into a planned section, and mark the intent-only baseline as superseded, with the reason.
+3. The validator is too shallow. It must enforce: exactly 518 rows sorted by case_id and one row per case in deletion_requests.csv; valid JSON in steps_json; [] for NOT_APPLICABLE; verification-only steps for COMPLETE; consecutive step_no from 1; only allowed phase/operation/state combinations; phase order FINDING, REMEDIATION, VERIFICATION; the evidence_id rules; and that every cited evidence id exists and was captured at or before audit_at.
+4. COMPLETE requires all of: every relevant copy has the treatment required by deletion_rules.csv, no active sync, import or restore path remains, retained records contain only permitted identifiers, and must-retain records remain available. A tombstone keeps only the stable user_id, and name, email, phone and email hash must be removed.
+5. Never cite evidence captured after a case's audit_at, and never use organizer-only files or hardcoded labels.
+6. Ordering is unresolved. problem_statement.md says to sort by phase, then the operation table order, then system_id and resource_id ascending. AGENTS.md section 6.5 says to disable flows and block restores first and to process downstream copies before sources when there is a dependency. Check sample_output.csv and tell me which convention the samples actually follow, with examples, before you design ordering.
+7. Deliverables: evaluation/evaluation_report.md and evaluation/usage_report.md must sit in a top-level evaluation/ folder, with at least 3 extra evaluation cases we write. Every model call must count its tokens and cost, and the usage report must come from the same final full run that produced output.csv. Plan quota and run time for 518 cases, with caching and batching.
+8. code.zip must exclude dataset/, .venv, caches, nested archives and secrets. Add a packaging script and make sure .gitignore covers .venv/, .env and the cache folder.
+
+Tasks, in order. Do not build anything yet.
+A. Run the baseline against sample_output.csv and report the real numbers on the real metrics.
+B. Propose a tiered plan: (1) valid output for all 518 cases with a strict validator; (2) correct NOT_APPLICABLE detection; (3) the evidence-based deletion audit; (4) the completeness verdict and step ordering. Use deterministic code for everything that can be, including the SQLite snapshots, and use an LLM only where text, images or PDFs must be read into structured facts, with a fallback if it fails. The system must run without an API key and degrade gracefully.
+C. Rewrite DECISIONS.md as described in point 2, with the tier plan and a cut list.
+D. Do not build anything I cannot explain in 30 seconds. Keep your answers concise.
+
+Agent Response Summary:
+Ran the existing classifier in memory over all 32 public samples: status accuracy 16/32 (50.0%), exact expected steps reproduced 0/193, aligned fields matched 0/1,351, exact ordered sequences 0/32. Confirmed all 32 sample sequences satisfy operation-table sorting; examples also honor flow/restore preconditions, but no sample resolves downstream-vs-source tie-breaking. Rewrote DECISIONS.md with implemented state, superseded baseline, measured metrics, planned tiers, quota, ordering proposal, and cut list. No implementation code was changed.
+
+Actions:
+* Ran Python in-memory comparison against sample_deletion_requests.csv and sample_output.csv.
+* Checked all sample_output step sequences against operation table and dependency preconditions.
+* Rewrote DECISIONS.md only.
+
+Context:
+tool=Codex
+model=GPT-6
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+## [2026-10-24T19:33:37Z] SESSION START
+
+tool=Codex
+model=GPT-6
+Repo Root: C:\Users\Admin\hackerrank-orchestrate-october26
+Branch: main
+Worktree: main
+Parent Agent: none
+Language: py
+Time Remaining: not configured
+
+## [2026-10-24T19:33:37Z] Implement Tier 1 pipeline and checks
+
+User Prompt (verbatim, secrets redacted):
+Implement Tier 1 only, nothing else. (1) A strict validator for output.csv with the checks in point 3 of my earlier corrections. (2) A deterministic writer that produces one row per case_id in deletion_requests.csv, sorted, using rule-based NOT_APPLICABLE detection and, for now, a clearly marked placeholder status for deletion cases. (3) A packaging script that builds code.zip excluding dataset/, .venv, caches and secrets. (4) .gitignore entries for .venv/, .env and the cache folder. (5) A scorer that runs the pipeline on sample_deletion_requests.csv and compares against sample_output.csv for status, step-level, field-level and sequence accuracy. Also count evidence files by type under dataset/evidence/ and tell me how many are images and PDFs. Do not start the evidence audit. Keep the answer short.
+
+Agent Response Summary:
+Updated the deterministic writer, strict output validator, public-sample scorer, packaging script, and .gitignore; generated output.csv and code.zip. The writer clearly marks deletion cases INCOMPLETE as a placeholder and no evidence audit was started. The output validated for all 518 cases; sample score was 50.0% status accuracy and 0.0% for step, field, and sequence accuracy.
+
+Actions:
+* Edited code/main.py, code/validate_output.py, code/score_samples.py, code/package.py, and .gitignore.
+* Ran python code/main.py, python code/validate_output.py, python code/score_samples.py, and python code/package.py; checked archive contents.
+* Counted evidence types: 11 PNG images and 4 PDFs.
+
+Context:
+tool=Codex
+model=GPT-6
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-24T19:36:13Z] Trace public sample cases and validator
+
+User Prompt (verbatim, secrets redacted):
+Read-only, no code changes. For three sample cases (one COMPLETE, one INCOMPLETE, one with a retained record or tombstone), trace from the inputs to the expected steps in sample_output.csv: which evidence files, activity rows and audit rows produce each step, and how the request email maps to the user_id. Also run the validator against sample_output.csv itself and tell me whether it accepts all 32 rows.
+
+Agent Response Summary:
+Read sample answers, corresponding requests, identity snapshot, history, activity, evidence manifest and linked SQL/JSON artifacts for one COMPLETE case, one INCOMPLETE case, and one tombstone case. Ran the validator against sample_output.csv by redirecting its input path in memory; it rejected the 32-row file because the validator enforces the full 518-row submission contract. No code or dataset files were changed.
+
+Actions:
+* Read-only Python inspection of sample CSVs, identity/audit/activity rows, manifest entries, and evidence_51/evidence_54 contents.
+* Ran validate_output.validate() in memory with OUTPUT set to dataset/sample_output.csv; it rejected 32 rows, expected 518.
+
+Context:
+tool=Codex
+model=GPT-6
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
