@@ -5,6 +5,7 @@ import csv
 import argparse
 import json
 from pathlib import Path
+from timestamps import parse_timestamp
 
 ROOT = Path(__file__).resolve().parents[1]
 DATASET = ROOT / "dataset"
@@ -113,7 +114,7 @@ def validate(expected_cases: Path = DATASET / "deletion_requests.csv", expected_
                 record = known_evidence.get(evidence_id)
                 if record is None:
                     raise ValueError(f"Line {line_no}, step {expected_no}: unknown evidence_id {evidence_id!r}")
-                if record["time"] > audit_at:
+                if parse_timestamp(record["time"]) > parse_timestamp(audit_at):
                     raise ValueError(f"Line {line_no}, step {expected_no}: evidence {evidence_id!r} is after audit_at")
     return len(rows)
 
