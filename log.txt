@@ -746,3 +746,102 @@ worktree=main
 parent_agent=none
 
 
+## [2026-10-25 08:57:30Z] Make main entry point and package deterministic output
+
+User Prompt (verbatim, secrets redacted):
+Freeze all feature work. Do not change any logic. Do the following, and paste the raw command output for every number you report. Never write a metric that did not come from a command run in this session.
+
+1. Make `python code/main.py` the single entry point. From a clean clone with dataset/ present, it must read dataset/, run the verdict and step generation, and write the final output.csv at the repo root, sorted by case_id, with exactly 518 rows. Remove or disable any code path that writes the old status-only output. Delete output.candidate.csv once the new output.csv matches it. Run it twice and show that the two outputs are byte-identical and how long a run takes.
+2. Run the strict validator on output.csv and show the result, plus the counts of COMPLETE, INCOMPLETE and NOT_APPLICABLE.
+3. Write evaluation/evaluation_report.md at the top-level evaluation/ folder with: case-level status accuracy (32/32), step-level, field-level and sequence accuracy on the 32 samples, tuple precision and recall, the 30-row intent file as a gate check, the three extra cases (extra_01 non-deletion, extra_02 historical email, extra_03 decoy overlay) with input, expected, actual and pass or fail, the failures found and the improvements made (the UNRESOLVED intent fallback, the backup restore_allowed handling, enabled-flag normalization, nested identifier propagation, the reverted tri-state experiment), and the known weaknesses (the 37 undiscovered pairs, absent records with subject-less activity rows, the 11 unparsed images, the two unexplained operation mismatches for SUPPORT_MESSAGE and ANALYTICS_PROFILE, legal-hold and unruled-category handling). State plainly that all tuning used the public samples, so the numbers are in-sample and not a hidden-set estimate.
+4. Write evaluation/usage_report.md from the same run that produced output.csv: command, timestamp, run time, model providers none, model calls 0, input tokens 0, output tokens 0, average tokens per request 0, estimated cost $0, and one sentence explaining that the pipeline is fully deterministic.
+5. Write README.md with setup and run commands for Windows and macOS/Linux, the Python version, the layout, the output contract, and the evaluation scripts. It must say that no API key is needed.
+6. Packaging: rebuild code.zip with code/, evaluation/, README.md, requirements.txt and DECISIONS.md, excluding dataset/, .venv, caches, nested archives, secrets and log.txt. Then unzip it into a temporary folder, copy dataset/ in, create a fresh virtual environment, install requirements, run `python code/main.py`, and show that the new output.csv is byte-identical to the one at the repo root. List the zip contents.
+Keep the final answer short.
+
+Agent Response Summary:
+Wired full verdict and step generation into code/main.py and disabled the candidate writer. Ran the output twice with identical hashes, validated row/schema/time constraints, wrote evaluation and usage reports plus README, rebuilt code.zip, and tested the extracted package with a fresh environment and dataset. The package output matched the root output byte-for-byte.
+
+Actions:
+* Updated code/main.py, code/generate_candidate.py, README.md, evaluation/evaluation_report.md, evaluation/usage_report.md, and DECISIONS.md.
+* Ran the main generator, validators, sample/status/discovery scorers, packaged environment installation and smoke run; deleted output.candidate.csv after hash match.
+
+Context:
+tool=Codex
+model=GPT-6
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+
+## [2026-10-25 09:01:17Z] Clarify exact runtime model identifier
+
+User Prompt (verbatim, secrets redacted):
+From now on every log.txt entry must use model=GPT-6-Luna, which is the exact model identifier shown by /status in this session. Do not guess or shorten it. Append one clarification entry stating that earlier entries recorded the family label "GPT-6" and that the exact identifier is GPT-6-Luna, with the session id 01a1712b-9a7b-7cc0-a6d2-7bb36194a4b7. Do not modify or delete any earlier entry. Then re-read the last three entries and confirm that each has exactly one populated tool= line and one populated model= line.
+
+Agent Response Summary:
+Appended this clarification without changing prior entries: earlier entries recorded the family label GPT-6; the exact identifier for session 01a1712b-9a7b-7cc0-a6d2-7bb36194a4b7 is GPT-6-Luna. Verified the last three log entries each contain exactly one populated tool= and model= line.
+
+Actions:
+* Appended one clarification entry to log.txt and checked the last three entries.
+
+Context:
+tool=Codex
+model=GPT-6-Luna
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+
+## [2026-10-25 09:05:41Z] Compare final statuses and audit report counts
+
+User Prompt (verbatim, secrets redacted):
+Read-only, no code changes. Print counts and short excerpts only, never whole files.
+1. List the cases whose status in the final output.csv differs from the earlier status-only verdict run (196 COMPLETE, 312 INCOMPLETE), giving the count and direction and grouping them by cause with counts. For three flipped cases from different groups, show only the decisive raw evidence row, its captured_at against audit_at, and whether the flip follows deletion_rules.csv. If no earlier output is available to compare, say so and instead report the count of COMPLETE cases that gained a finding, and why.
+2. Search README.md, DECISIONS.md and evaluation/evaluation_report.md for every metric and count, and list only the ones that disagree with the final run (tuple precision 95.6%, recall 78.8%, step 55.7%, field 68.9%, sequence 21.9%, statuses 164, 344 and 10, 35 false negatives at 68.5% recall and 98.7% precision, 11 images, zero model calls).
+3. Print only the section headings of evaluation/evaluation_report.md, then its "known weaknesses" section in full, and all of evaluation/usage_report.md.
+4. State whether the report says that all tuning used the public samples and that the numbers are in-sample.
+
+Agent Response Summary:
+Compared output.csv with the preserved status-only output in commit 767e176, grouped the 32 status flips, inspected cutoff-valid evidence for representative flip groups, and checked report metrics against current sample, discovery, and output counts. Printed only evaluation report headings, its known-weaknesses section, and the full usage report as requested.
+
+Actions:
+* Read git history, output.csv, evidence/index data, README.md, DECISIONS.md, evaluation/evaluation_report.md, evaluation/usage_report.md; ran read-only score/count commands.
+
+Context:
+tool=Codex
+model=GPT-6-Luna
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+
+## [2026-10-25 09:10:24Z] Update evaluation wording and verify rebuilt package
+
+User Prompt (verbatim, secrets redacted):
+Documentation-only changes; do not change any logic or output.
+1. In evaluation/evaluation_report.md, replace the sentence beginning "Earlier task context referred to 37 undiscovered pairs" with: "An earlier measurement reported 37 undiscovered pairs; the final run reports 35 (recall 68.5%, precision 98.7%)."
+2. Add a section "Verdict changes after nested-identifier propagation": between the earlier status-only output (commit 767e176) and the final output, 32 cases changed from COMPLETE to INCOMPLETE and none changed the other way; 31 because a linked SEARCH_INDEX_ENTRY record remains (rule_03 requires DELETE), and 1 because an active data flow remains; each cites evidence captured at or before audit_at.
+3. Add to known weaknesses: the numbers are in-sample and hidden-set accuracy is unknown; legal-hold handling is unverified; tested only on Python 3.13.2 with pypdf 6.21.2.
+4. Confirm that README.md states the tested Python version and that no API key is needed.
+Then rebuild code.zip with the packaging script and run the clean-room check. The packaged run must produce an output.csv with SHA256 F208920C30E67C927D88C1115A74B01EDC7B448A62CA159099C8D3907048F8BB. Print the zip file count and whether it contains dataset/, .venv, .env or log.txt (it must not). Keep the answer short.
+
+Agent Response Summary:
+Updated only evaluation_report.md with the requested verdict-change section and known-weakness wording. Confirmed README.md names Python 3.13.2 and says no API key is needed. Rebuilt code.zip and ran the extracted package in a fresh environment; its output hash matched the unchanged root output and the archive excludes dataset, .venv, .env, and log.txt.
+
+Actions:
+* Edited evaluation/evaluation_report.md; rebuilt code.zip with code/package.py.
+* Created and removed a temporary clean-room copy, installed requirements, ran python code/main.py and its validator, and checked archive contents and hashes.
+
+Context:
+tool=Codex
+model=GPT-6-Luna
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+

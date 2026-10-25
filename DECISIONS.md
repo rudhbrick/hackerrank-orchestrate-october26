@@ -10,7 +10,7 @@
 
 - `code/main.py` resolves intent in English, Portuguese, Spanish, French, Japanese, and Korean; deletion and negation verbs are stem matched. Enabled flow states accept `true`, `1`, `yes`, `on`, and `enabled`. Backup rows are deduplicated by source and resource at the latest capture time, and `restore_allowed=false` is compliant.
 - Intent regression results: 32/32 public sample statuses, 30/30 intent-gate rows, 3/3 extra cases, and 37/37 affirmative "no longer" requests classified as DELETE. Full intent count: 508 DELETE, 10 NOT_DELETION, 0 UNRESOLVED.
-- Full output run: 518 rows; 196 COMPLETE, 312 INCOMPLETE, 10 NOT_APPLICABLE. The latest run recorded 0 unresolved-intent fallbacks in `evaluation/unresolved_intent_flags.csv`; if any remain, the writer audits them as deletion requests and records their case IDs in that file.
+- Full output run: 518 rows; 164 COMPLETE, 344 INCOMPLETE, 10 NOT_APPLICABLE. The latest run recorded 0 unresolved-intent fallbacks in `evaluation/unresolved_intent_flags.csv`; if any remain, the writer audits them as deletion requests and records their case IDs in that file.
 - No non-English request remained non-DELETE. Language/template counts after replacing case-specific emails, names, IDs, phone numbers, and numeric tokens: English 370, French 1, Japanese 1, Korean 1, Portuguese 1, Spanish 1.
 
 ## Historical baseline (superseded)

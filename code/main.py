@@ -364,18 +364,13 @@ def audit_status(case: dict[str, str], facts: list[dict[str, Any]], identities: 
 
 
 def build_rows(requests: list[dict[str, str]], facts: list[dict[str, Any]] | None = None,
-               identities: Any | None = None) -> list[dict[str, str]]:
+               identities: Any | None = None,
+               flag_path: Path | None = None) -> list[dict[str, str]]:
+    """Build complete verdict-and-step output rows for the requested cases."""
     facts = build_index() if facts is None else facts
     identities = load_index() if identities is None else identities
-    result = []
-    for request in sorted(requests, key=lambda row: row["case_id"]):
-        status = audit_status(request, facts, identities)
-        if status == "UNRESOLVED":
-            # Last-resort deletion fallback: a workflow-submitted request must
-            # never disappear from the output or emit an unsupported status.
-            status = "INCOMPLETE"
-        result.append({"case_id": request["case_id"], "deletion_status": status, "steps_json": "[]"})
-    return result
+    from step_generation import build_candidate
+    return build_candidate(requests, facts, identities, flag_path)
 
 
 def write_rows(rows: list[dict[str, str]], path: Path) -> None:
@@ -387,11 +382,14 @@ def write_rows(rows: list[dict[str, str]], path: Path) -> None:
 
 def main() -> None:
     requests = read_rows(DATASET / "deletion_requests.csv")
+    facts = build_index()
+    identities = load_index()
+    flags_path = ROOT / "evaluation" / "empty_step_id_flags.csv"
+    rows = build_rows(requests, facts, identities, flags_path)
     flags = [
         {"case_id": request["case_id"], "original_intent": "UNRESOLVED", "fallback_intent": "DELETE"}
         for request in requests if classify_intent(request.get("request_text", "")) == "UNRESOLVED"
     ]
-    rows = build_rows(requests)
     write_rows(rows, OUTPUT)
     flag_path = ROOT / "evaluation" / "unresolved_intent_flags.csv"
     flag_path.parent.mkdir(parents=True, exist_ok=True)
@@ -399,7 +397,7 @@ def main() -> None:
         writer = csv.DictWriter(stream, fieldnames=["case_id", "original_intent", "fallback_intent"], lineterminator="\n")
         writer.writeheader()
         writer.writerows(sorted(flags, key=lambda row: row["case_id"]))
-    print(f"Wrote {len(rows)} status-only rows to {OUTPUT}; steps_json is always [].")
+    print(f"Wrote {len(rows)} verdict-and-step rows to {OUTPUT}.")
     print(f"Recorded {len(flags)} unresolved-intent deletion fallbacks in {flag_path}.")
 
 
