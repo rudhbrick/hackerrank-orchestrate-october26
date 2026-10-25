@@ -17,14 +17,19 @@ CACHE = ROOT / ".cache" / "evidence_facts"
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 EMAIL_RE = re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")
 HASH_RE = re.compile(r"\b[a-fA-F0-9]{64}\b")
-ID_TOKEN = r"(?:user|account|support|search|export|analytics|audit_record|tombstone|data_flow|backup|order|invoice|ticket|record|customer|event|job|sync|restore|index|replica)[_-](?:[0-9]+|[a-f0-9]{4,})"
+ID_TOKEN = r"(?:user|account|support|search|export|analytics|audit_record|tombstone|data_flow|backup|order|invoice|ticket|record|customer|event|job|sync|restore|index|replica|ord)[_-](?:[0-9]+|[a-f0-9]{4,})"
 ID_RE = re.compile(rf"\b{ID_TOKEN}\b", re.I)
-RESOURCE_FIELD_RE = re.compile(rf"(?i)\b(?:resource_id|record_id|target_resource|resource)\s*[:=]\s*[\"']?({ID_TOKEN})\b")
+RESOURCE_FIELD_RE = re.compile(rf"(?i)\b(?:resource_id|record_id|target_resource|resource)\s*[:=]\s*(?:\\)?\s*[\"']?({ID_TOKEN})\b")
 RESOURCE_REFERENCE_RE = re.compile(rf"(?i)\breference\b[^\r\n]{{0,100}}?/\s*({ID_TOKEN})\b")
+RESOURCE_NAMED_RE = re.compile(rf"(?i)\b(?:event\s+reference|resource(?:\s+id)?|record(?:\s+id)?|order(?:\s+id|\s+number)?|invoice(?:\s+id)?|ticket(?:\s+id)?|audit\s+record)\s*[:=#-]?\s*[\"']?({ID_TOKEN})\b")
+LOG_ATTR_RE = re.compile(r"(?i)\b([a-z][a-z0-9_]*)\s*[:=]\s*(?:\\)?(?:\"([^\"]*)\"|'([^']*)'|([^,}\s]+))")
 PHONE_RE = re.compile(r"(?<!\w)\+?[0-9][0-9 ()-]{6,}[0-9](?!\w)")
 RESOURCE_KEYS = {"resource_id", "record_id", "account_id"}
 SYSTEM_KEYS = {"system", "system_id", "data_store", "source_system", "target_system", "service", "platform", "origin"}
 NAME_KEYS = {"name", "full_name", "customer_name", "requester_name", "contact_name", "account_holder_name"}
+STATE_KEYS = {"result", "status", "status_code", "account_status", "record_type", "data_category",
+              "required_action", "enabled", "restore_allowed", "last_delivery_status", "deletion_state",
+              "redacted", "anonymized", "is_deleted", "profile", "customer_reference", "subject_reference"}
 
 
 def read_manifest() -> list[dict[str, str]]:
@@ -59,6 +64,31 @@ def system_value(obj: dict[str, Any], fallback: str) -> str:
     return fallback
 
 
+def resource_ids_in_text(text: str) -> set[str]:
+    """Find identifiers explicitly labeled as resource/record/event references."""
+    return ({norm(value) for value in RESOURCE_FIELD_RE.findall(text)}
+            | {norm(value) for value in RESOURCE_REFERENCE_RE.findall(text)}
+            | {norm(value) for value in RESOURCE_NAMED_RE.findall(text)})
+
+
+def line_attributes(line: str) -> dict[str, Any]:
+    """Extract compact typed fields from JSON-like and key=value log records."""
+    keep = {"event", "record_type", "data_category", "category", "file", "result", "status",
+            "status_code", "rows", "http_status", "enabled", "restore_allowed", "redacted", "anonymized"}
+    attrs = {}
+    for key, quoted, single, bare in LOG_ATTR_RE.findall(line):
+        key = key.casefold()
+        if key in keep:
+            value = (quoted or single or bare).rstrip("\\")
+            if value.casefold() in {"true", "false"}:
+                attrs[key] = value.casefold() == "true"
+            elif value.isdigit():
+                attrs[key] = int(value)
+            else:
+                attrs[key] = value
+    return attrs
+
+
 def resource_system(resource_id: str, fallback: str) -> str:
     prefix = resource_id.casefold().split("_")[0].split("-")[0]
     return {"account": "account_service", "search": "search_service", "analytics": "analytics_platform",
@@ -71,8 +101,11 @@ def object_facts(obj: Any, file_id: str, captured_at: str, fallback: str, parent
     if isinstance(obj, dict):
         resources: list[tuple[str, str]] = []
         identifiers: dict[str, set[str]] = {}
+        attributes: dict[str, Any] = {}
         for key, value in obj.items():
             k = key.casefold()
+            if k in STATE_KEYS:
+                attributes[k] = value
             if isinstance(value, (str, int, float)) and (k in RESOURCE_KEYS or k.endswith("_resource_id")) and str(value):
                 resources.append((norm(value), k))
             if isinstance(value, str) and value.strip():
@@ -87,6 +120,8 @@ def object_facts(obj: Any, file_id: str, captured_at: str, fallback: str, parent
                     field = "name"
                 elif k in {"user_id", "subject_reference", "customer_reference", "subject_id", "user_reference", "customer_id", "subject_selector"} and value.casefold().startswith("user_"):
                     field = "user_id"
+                elif k in {"subject_reference", "customer_reference", "user_reference", "lookup_value", "subject_key"} and EMAIL_RE.fullmatch(value.strip()):
+                    field = "email"
                 elif k in {"lookup_value", "correlation_key", "subject_key"}:
                     if EMAIL_RE.fullmatch(value.strip()): field = "email"
                     elif HASH_RE.fullmatch(value.strip()): field = "email_hash"
@@ -99,10 +134,12 @@ def object_facts(obj: Any, file_id: str, captured_at: str, fallback: str, parent
                 resource_sys = resource_system(resource, system)
                 result.append({"file_id": file_id, "captured_at": captured_at,
                                "system": resource_sys, "resource_ids": [resource],
-                               "identifiers": {k: sorted(v) for k, v in identifiers.items()}})
+                               "identifiers": {k: sorted(v) for k, v in identifiers.items()},
+                               "attributes": attributes})
         elif identifiers:
             result.append({"file_id": file_id, "captured_at": captured_at, "system": system_value(obj, fallback),
-                           "resource_ids": [], "identifiers": {k: sorted(v) for k, v in identifiers.items()}})
+                           "resource_ids": [], "identifiers": {k: sorted(v) for k, v in identifiers.items()},
+                           "attributes": attributes})
         for key, value in obj.items():
             result.extend(object_facts(value, file_id, captured_at, fallback, key))
     elif isinstance(obj, list):
@@ -128,7 +165,11 @@ def parse_sql(path: Path, file_id: str, captured_at: str, fallback: str) -> list
                             record[column] = json.loads(value)
                         except json.JSONDecodeError:
                             pass
-                facts.extend(object_facts(record, file_id, captured_at, fallback))
+                table_facts = object_facts(record, file_id, captured_at, fallback)
+                for fact in table_facts:
+                    # Table/source identity keeps primary, regional and replica observations separate.
+                    fact["source"] = table
+                facts.extend(table_facts)
         return facts
     finally:
         db.close()
@@ -136,8 +177,7 @@ def parse_sql(path: Path, file_id: str, captured_at: str, fallback: str) -> list
 
 def _text_facts(text: str, file_id: str, captured_at: str, fallback: str) -> list[dict[str, Any]]:
     identifiers = text_identifiers(text)
-    resources = sorted({norm(x) for x in RESOURCE_FIELD_RE.findall(text)} |
-                       {norm(x) for x in RESOURCE_REFERENCE_RE.findall(text)})
+    resources = sorted(resource_ids_in_text(text))
     service = re.search(r"(?i)\bservice\s*=\s*[\"']?([A-Za-z0-9_-]+)", text)
     default_system = norm(service.group(1)) if service else fallback
     if resources:
@@ -148,6 +188,21 @@ def _text_facts(text: str, file_id: str, captured_at: str, fallback: str) -> lis
         return [{"file_id": file_id, "captured_at": captured_at, "system": default_system,
                  "resource_ids": [], "identifiers": identifiers}]
     return []
+
+
+def _pdf_resource_facts(text: str, file_id: str, captured_at: str, fallback: str) -> list[dict[str, Any]]:
+    """PDF text often names row IDs without a resource_id label; retain row scope."""
+    identifiers = text_identifiers(text)
+    resource_prefixes = ("account_", "support_", "search_", "export_", "analytics_",
+                        "audit_record_", "tombstone_", "data_flow_", "backup_",
+                        "sync_", "job_", "restore_", "index_", "replica_", "record_")
+    resources = sorted({norm(value) for value in ID_RE.findall(text)
+                        if norm(value).startswith(resource_prefixes)})
+    if resources:
+        return [{"file_id": file_id, "captured_at": captured_at,
+                 "system": resource_system(resource, fallback), "resource_ids": [resource],
+                 "identifiers": identifiers} for resource in resources]
+    return _text_facts(text, file_id, captured_at, fallback)
 
 
 def _pipe_record_facts(line: str, file_id: str, captured_at: str, fallback: str) -> list[dict[str, Any]]:
@@ -171,16 +226,16 @@ def _log_facts(text: str, file_id: str, captured_at: str, fallback: str) -> list
     for line in text.splitlines():
         trace_match = re.search(r"(?i)\btrace_id\s*=\s*[\"']?([A-Za-z0-9_-]+)", line)
         ids = text_identifiers(line)
-        resources = sorted({norm(x) for x in RESOURCE_FIELD_RE.findall(line)} |
-                           {norm(x) for x in RESOURCE_REFERENCE_RE.findall(line)})
-        service = re.search(r"(?i)\bservice\s*=\s*[\"']?([A-Za-z0-9_-]+)", line)
+        resources = sorted(resource_ids_in_text(line))
+        service = re.search(r"(?i)\b(?:service|function)\s*[:=]\s*(?:\\)?[\"']?([A-Za-z0-9_-]+)", line)
         default_system = norm(service.group(1)) if service else fallback
         if trace_match:
-            trace = traces.setdefault(trace_match.group(1), {"identifiers": {}, "resources": {}})
+            trace = traces.setdefault(trace_match.group(1), {"identifiers": {}, "resources": {}, "attributes": {}})
             for field, values in ids.items():
                 trace["identifiers"].setdefault(field, set()).update(values)
             for resource in resources:
                 trace["resources"][resource] = resource_system(resource, default_system)
+            trace["attributes"].update(line_attributes(line))
             outcome = re.search(r"(?i)\b(rows|http_status|status_code)\s*=\s*(\d+)\b", line)
             if outcome:
                 trace.setdefault("outcomes", set()).add(f"{outcome.group(1).casefold()}={outcome.group(2)}")
@@ -190,6 +245,7 @@ def _log_facts(text: str, file_id: str, captured_at: str, fallback: str) -> list
                 standalone.extend({"file_id": file_id, "captured_at": captured_at,
                                    "system": resource_system(resource, default_system),
                                    "resource_ids": [resource], "identifiers": ids,
+                                   "attributes": line_attributes(line),
                                    "outcomes": [f"{outcome.group(1).casefold()}={outcome.group(2)}"] if outcome else []}
                                   for resource in resources)
             else:
@@ -200,6 +256,7 @@ def _log_facts(text: str, file_id: str, captured_at: str, fallback: str) -> list
             standalone.append({"file_id": file_id, "captured_at": captured_at, "system": system,
                                "resource_ids": [resource],
                                "identifiers": {k: sorted(v) for k, v in trace["identifiers"].items()},
+                               "attributes": trace["attributes"],
                                "outcomes": sorted(trace.get("outcomes", set()))})
     return standalone
 
@@ -216,8 +273,15 @@ def parse_file(path: Path, file_id: str, captured_at: str) -> list[dict[str, Any
         return object_facts(json.loads(path.read_text(encoding="utf-8-sig")), file_id, captured_at, fallback)
     if suffix == ".pdf":
         from pypdf import PdfReader
-        return [fact for page in PdfReader(str(path)).pages
-                for fact in _text_facts(page.extract_text() or "", file_id, captured_at, fallback)]
+        facts = []
+        for page in PdfReader(str(path)).pages:
+            text = page.extract_text() or ""
+            # Scope identifiers to PDF record blocks instead of joining an entire page.
+            blocks = re.split(r"(?im)(?=^\s*(?:Record|\d+)\s*$)", text)
+            blocks = [block for block in blocks if block.strip()] or [text]
+            facts.extend(fact for block in blocks
+                         for fact in _pdf_resource_facts(block, file_id, captured_at, fallback))
+        return facts
     text = path.read_text(encoding="utf-8-sig", errors="replace")
     if suffix == ".log":
         return _log_facts(text, file_id, captured_at, fallback)
@@ -261,7 +325,7 @@ def build_index(overlay_path: Path | None = None) -> list[dict[str, Any]]:
     facts: list[dict[str, Any]] = []
     for entry in read_manifest():
         path = DATASET / entry["file_path"]
-        digest = hashlib.sha256(b"evidence-facts-v8\0" + path.read_bytes()).hexdigest()
+        digest = hashlib.sha256(b"evidence-facts-v15\0" + path.read_bytes()).hexdigest()
         cache_path = CACHE / f"{digest}.json"
         if cache_path.exists():
             parsed = json.loads(cache_path.read_text(encoding="utf-8"))
