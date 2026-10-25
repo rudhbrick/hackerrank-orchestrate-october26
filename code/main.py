@@ -222,7 +222,8 @@ def latest_subject_resources(case: dict[str, str], facts: list[dict[str, Any]],
             "file_id": sorted({str(f.get("file_id", "")) for f in newest})[0],
             "file_ids": sorted({str(f.get("file_id", "")) for f in newest if f.get("file_id")}),
             "captured_at": newest[0]["captured_at"], "system": newest[0].get("system", ""),
-            "source": newest[0].get("source"), "resource_ids": [resource],
+            "source": newest[0].get("source"), "file_path": newest[0].get("file_path", ""),
+            "resource_ids": [resource],
             "identifiers": {}, "attributes": {}, "outcomes": [],
         }
         identifiers: dict[str, set[str]] = {}
@@ -249,6 +250,22 @@ def _bool_value(value: Any) -> bool | None:
     if normalized in {"false", "0", "no", "off", "disabled", "blocked"}:
         return False
     return None
+
+
+def _flow_can_copy(fact: dict[str, Any]) -> bool:
+    """Require evidence of delivery/execution in addition to an enabled setting."""
+    attrs = {str(k).casefold(): v for k, v in fact.get("attributes", {}).items()}
+    result = str(attrs.get("result", attrs.get("status", ""))).strip().casefold()
+    if result in {"active", "running"}:
+        return True
+    if _bool_value(attrs.get("enabled")) is not True:
+        return False
+    delivery = str(attrs.get("last_delivery_status", "")).strip().casefold()
+    if delivery in {"delivered", "success", "succeeded", "complete", "completed"}:
+        return True
+    scheduler = _bool_value(attrs.get("scheduler_registered")) is True
+    last_run = str(attrs.get("last_run", "")).strip().casefold()
+    return scheduler and last_run in {"success", "succeeded", "delivered", "complete", "completed"}
 
 
 def _treatment(fact: dict[str, Any]) -> str:
@@ -295,7 +312,7 @@ def _treatment(fact: dict[str, Any]) -> str:
     if action == "DELETE":
         return "violation"
     if resource.startswith(("data_flow_", "sync_", "job_")):
-        return "violation" if enabled is True else "unknown"
+        return "violation" if _flow_can_copy(fact) else "unknown"
     if not action:
         # No supplied policy category means this fact cannot decide record treatment.
         return "unknown"

@@ -24,7 +24,8 @@ RESOURCE_REFERENCE_RE = re.compile(rf"(?i)\breference\b[^\r\n]{{0,100}}?/\s*({ID
 RESOURCE_NAMED_RE = re.compile(rf"(?i)\b(?:event\s+reference|resource(?:\s+id)?|record(?:\s+id)?|order(?:\s+id|\s+number)?|invoice(?:\s+id)?|ticket(?:\s+id)?|audit\s+record)\s*[:=#-]?\s*[\"']?({ID_TOKEN})\b")
 LOG_ATTR_RE = re.compile(r"(?i)\b([a-z][a-z0-9_]*)\s*[:=]\s*(?:\\)?(?:\"([^\"]*)\"|'([^']*)'|([^,}\s]+))")
 PHONE_RE = re.compile(r"(?<!\w)\+?[0-9][0-9 ()-]{6,}[0-9](?!\w)")
-RESOURCE_KEYS = {"resource_id", "record_id", "account_id"}
+RESOURCE_KEYS = {"resource_id", "record_id"}
+RESOURCE_REFERENCE_KEYS = {"source_resource_id", "parent_resource_id", "origin_resource_id", "related_resource_id"}
 SYSTEM_KEYS = {"system", "system_id", "data_store", "source_system", "target_system", "service", "platform", "origin"}
 NAME_KEYS = {"name", "full_name", "customer_name", "requester_name", "contact_name", "account_holder_name"}
 STATE_KEYS = {"result", "status", "status_code", "account_status", "record_type", "data_category",
@@ -35,6 +36,11 @@ STATE_KEYS = {"result", "status", "status_code", "account_status", "record_type"
 def read_manifest() -> list[dict[str, str]]:
     with (DATASET / "evidence_files.csv").open(encoding="utf-8-sig", newline="") as stream:
         return list(csv.DictReader(stream))
+
+
+def policy_categories() -> set[str]:
+    with (DATASET / "deletion_rules.csv").open(encoding="utf-8-sig", newline="") as stream:
+        return {row["data_category"].casefold() for row in csv.DictReader(stream)}
 
 
 def norm(value: Any) -> str:
@@ -74,7 +80,8 @@ def resource_ids_in_text(text: str) -> set[str]:
 def line_attributes(line: str) -> dict[str, Any]:
     """Extract compact typed fields from JSON-like and key=value log records."""
     keep = {"event", "record_type", "data_category", "category", "file", "result", "status",
-            "status_code", "rows", "http_status", "enabled", "restore_allowed", "redacted", "anonymized"}
+            "status_code", "rows", "http_status", "enabled", "restore_allowed", "redacted", "anonymized",
+            "last_delivery_status", "scheduler_registered", "last_run"}
     attrs = {}
     for key, quoted, single, bare in LOG_ATTR_RE.findall(line):
         key = key.casefold()
@@ -102,11 +109,19 @@ def object_facts(obj: Any, file_id: str, captured_at: str, fallback: str, parent
         resources: list[tuple[str, str]] = []
         identifiers: dict[str, set[str]] = {}
         attributes: dict[str, Any] = {}
+        has_record_key = any(key.casefold() in RESOURCE_KEYS or
+                             (key.casefold().endswith("_resource_id") and key.casefold() not in RESOURCE_REFERENCE_KEYS)
+                             for key in obj)
         for key, value in obj.items():
             k = key.casefold()
             if k in STATE_KEYS:
                 attributes[k] = value
-            if isinstance(value, (str, int, float)) and (k in RESOURCE_KEYS or k.endswith("_resource_id")) and str(value):
+            is_primary_resource = k in RESOURCE_KEYS or (k.endswith("_resource_id") and k not in RESOURCE_REFERENCE_KEYS)
+            # account_id is commonly a foreign key on search/support rows. Treat it
+            # as a resource only when it is the row's sole key in an account table.
+            is_account_record = (k == "account_id" and not has_record_key
+                                 and any(token in parent.casefold() for token in ("account", "profile")))
+            if isinstance(value, (str, int, float)) and (is_primary_resource or is_account_record) and str(value):
                 resources.append((norm(value), k))
             if isinstance(value, str) and value.strip():
                 field = None
@@ -208,14 +223,25 @@ def _pdf_resource_facts(text: str, file_id: str, captured_at: str, fallback: str
 def _pipe_record_facts(line: str, file_id: str, captured_at: str, fallback: str) -> list[dict[str, Any]]:
     cells = [cell.strip() for cell in line.split("|")]
     facts = []
+    categories = policy_categories()
+    state_values = {"active", "disabled", "not_found", "absent", "deleted", "found", "present",
+                    "identifiable", "anonymized", "redacted", "retained", "blocked"}
     for index, cell in enumerate(cells):
         if index == 0 or not re.fullmatch(ID_TOKEN, cell, re.I):
             continue
+        resource_id = cell
         system = norm(cells[index - 1]) or fallback
         identifiers = text_identifiers(" ".join(cells[index + 1:]))
+        attributes: dict[str, Any] = {}
+        for following_cell in cells[index + 1:index + 3]:
+            value = norm(following_cell)
+            if value in state_values:
+                attributes["result"] = value
+            elif value in categories and "record_type" not in attributes:
+                attributes["record_type"] = norm(following_cell).replace(" ", "_")
         facts.append({"file_id": file_id, "captured_at": captured_at,
-                      "system": resource_system(cell, system), "resource_ids": [norm(cell)],
-                      "identifiers": identifiers})
+                      "system": resource_system(resource_id, system), "resource_ids": [norm(resource_id)],
+                      "identifiers": identifiers, "attributes": attributes})
     return facts
 
 
@@ -325,7 +351,7 @@ def build_index(overlay_path: Path | None = None) -> list[dict[str, Any]]:
     facts: list[dict[str, Any]] = []
     for entry in read_manifest():
         path = DATASET / entry["file_path"]
-        digest = hashlib.sha256(b"evidence-facts-v15\0" + path.read_bytes()).hexdigest()
+        digest = hashlib.sha256(b"evidence-facts-v20\0" + path.read_bytes()).hexdigest()
         cache_path = CACHE / f"{digest}.json"
         if cache_path.exists():
             parsed = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -336,7 +362,8 @@ def build_index(overlay_path: Path | None = None) -> list[dict[str, Any]]:
         if not parsed:
             parsed = [{"system": path.stem.casefold(), "resource_ids": [], "identifiers": {},
                        "no_identifier_facts": True}]
-        parsed = [{**fact, "file_id": entry["file_id"], "captured_at": entry["captured_at"]} for fact in parsed]
+        parsed = [{**fact, "file_id": entry["file_id"], "captured_at": entry["captured_at"],
+                   "file_path": entry["file_path"]} for fact in parsed]
         facts.extend(parsed)
     if overlay_path is not None:
         facts.extend(_parse_overlay(overlay_path))
