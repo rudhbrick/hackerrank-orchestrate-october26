@@ -72,8 +72,10 @@ def compare(label: str, requests: list[dict[str, str]], gold_rows: list[dict[str
           f"sequence={exact_cases}/{len(gold_by)} ({exact_cases/len(gold_by):.1%})")
     for name, count in categories.most_common(5):
         print(f"  mismatch {name}: {count}; example {examples[name]}")
-    print(f"  tuple precision={tuple_matches}/{tuple_count_generated} ({tuple_matches/tuple_count_generated:.1%}); "
-          f"recall={tuple_matches}/{tuple_count_expected} ({tuple_matches/tuple_count_expected:.1%})")
+    precision = f"{tuple_matches/tuple_count_generated:.1%}" if tuple_count_generated else "n/a"
+    recall = f"{tuple_matches/tuple_count_expected:.1%}" if tuple_count_expected else "n/a"
+    print(f"  tuple precision={tuple_matches}/{tuple_count_generated} ({precision}); "
+          f"recall={tuple_matches}/{tuple_count_expected} ({recall})")
     diagnosis: Counter[str] = Counter()
     diagnosis_examples: dict[str, str] = {}
     for case_id, item in unmatched_expected:

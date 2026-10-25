@@ -2,6 +2,12 @@
 
 ## Current implementation and latest full run (2026-10-25)
 
+### Step-generation policy condition experiment (2026-10-25)
+
+- Tried tri-state evaluation of `deletion_rules.csv` conditions. Unknown conditions suppressed record steps. On public samples this reduced tuple recall from 78.8% to 50.8%, step accuracy from 55.7% to 23.8%, and sequence accuracy from 21.9% to 3.1%; it also left `extra_02` and `extra_03` with zero steps. Reverted the step-generation change; conditions again follow the previous behavior unless evidence explicitly contradicts the rule.
+- The two unexplained operation conflicts are `SUPPORT_MESSAGE` (`case_10` / `support_002`: gold expects DELETE, generated policy treatment is REDACT) and `ANALYTICS_PROFILE` (`case_12` / `analytics_9914`: gold expects DELETE, generated policy treatment is ANONYMIZE). `support_002` has no explicit shared-context value; `analytics_9914` has a linked email hash, which supports the rule condition “Record is still attributable to a user.”
+- After reverting, sample tuple precision/recall are 95.6%/78.8%, step accuracy 55.7%, field accuracy 68.9%, sequence accuracy 21.9%, and verdict accuracy 32/32. `extra_02` again matches `case_10` with 3 steps; `extra_03` matches `case_31` with 2 steps. Strict validation passes. The prior condition-aware status trial scored 29/32 and was reverted. Nested-identifier propagation remains enabled.
+
 - `code/main.py` resolves intent in English, Portuguese, Spanish, French, Japanese, and Korean; deletion and negation verbs are stem matched. Enabled flow states accept `true`, `1`, `yes`, `on`, and `enabled`. Backup rows are deduplicated by source and resource at the latest capture time, and `restore_allowed=false` is compliant.
 - Intent regression results: 32/32 public sample statuses, 30/30 intent-gate rows, 3/3 extra cases, and 37/37 affirmative "no longer" requests classified as DELETE. Full intent count: 508 DELETE, 10 NOT_DELETION, 0 UNRESOLVED.
 - Full output run: 518 rows; 196 COMPLETE, 312 INCOMPLETE, 10 NOT_APPLICABLE. The latest run recorded 0 unresolved-intent fallbacks in `evaluation/unresolved_intent_flags.csv`; if any remain, the writer audits them as deletion requests and records their case IDs in that file.

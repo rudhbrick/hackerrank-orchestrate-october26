@@ -700,3 +700,49 @@ worktree=main
 parent_agent=none
 
 
+## [2026-10-25 08:07:09Z] Evaluate rule conditions against mismatch tuples
+
+User Prompt (verbatim, secrets redacted):
+Do not hardcode case IDs, resources or systems, do not derive resource ids from numeric patterns, and do not relax the rule that evidence captured after audit_at is never cited.
+1. Print deletion_rules.csv in full, with every column and row, including the condition columns.
+2. For each sample tuple whose operation differs from the expected one (for example case_12 / analytics_9914 expects REPORT_REMAINING_RECORD and DELETE_RECORD, while we emit REPORT_EXPOSED_PII and ANONYMIZE_RECORD; support_002 expects DELETE, while we emit REDACT), show the rule row we applied, every other row for the same category, the record's attributes at audit_at, and the case's attributes (requested_at, audit_at, reported_status). Say which condition the gold answer implies, using only values present in the data.
+3. If the rules contain conditions that we do not evaluate, implement general evaluation of those conditions, keep unknown values as unknown, and adopt the change only if sample verdict accuracy stays 32/32 and tuple precision stays at or above 95%. If no condition explains the differences, say so with two examples.
+4. Rerun and report tuple precision and recall before and after, step, field and sequence accuracy before and after, how many of the 23 empty-evidence tuples and of the operation mismatches are now explained, and whether extra_02 and extra_03 still match their base samples. Keep the answer short.
+
+Agent Response Summary:
+Printed and traced all deletion rule rows and the six expected/generated operation mismatches. Added tri-state condition evaluation, leaving unsupported condition values unknown; adopted it because status accuracy remained 32/32 and tuple precision was 96.1%, while reporting the recall decrease. Reran strict validation and extra-case equality checks.
+
+Actions:
+* Added code/policy_conditions.py and integrated conditional applicability into code/step_generation.py.
+* Made code/score_candidate.py handle zero generated tuples; regenerated output.candidate.csv and ran scoring and validation.
+
+Context:
+tool=Codex
+model=GPT-6
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+
+## [2026-10-25 08:10:30Z] Revert tri-state step condition gating and verify baseline
+
+User Prompt (verbatim, secrets redacted):
+The tri-state condition change made step generation worse (tuple recall 78.8% to 50.8%, step accuracy 55.7% to 23.8%, sequence 21.9% to 3.1%) and silenced extra_02 and extra_03. Revert step generation to the previous behavior: a rule condition is treated as satisfied unless the evidence explicitly contradicts it. Keep the nested-identifier propagation. Then verify, with numbers: tuple precision about 95.6% and recall about 78.8%, step 55.7%, field 68.9%, sequence 21.9%, sample verdicts 32/32, and extra_02 and extra_03 matching their base samples with their steps present. Record in DECISIONS.md what we tried (tri-state conditions), why we reverted it, and the two unexplained mismatches with their category names. Do not try any further rule-condition work. Keep the answer short.
+
+Agent Response Summary:
+Reverted tri-state suppression in step generation and removed its helper; preserved nested identifier propagation. Recorded the failed experiment and the SUPPORT_MESSAGE and ANALYTICS_PROFILE mismatches in DECISIONS.md. Reran scoring, status checks, candidate validation, and extra-case equality checks.
+
+Actions:
+* Updated code/step_generation.py and DECISIONS.md; retained the zero-tuple-safe scorer adjustment.
+* Ran code/score_candidate.py, code/score_status.py, code/generate_candidate.py, code/validate_output.py, and extra-case equality check.
+
+Context:
+tool=Codex
+model=GPT-6
+branch=main
+repo_root=C:\Users\Admin\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+
