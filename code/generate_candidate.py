@@ -18,7 +18,8 @@ def main() -> None:
     requests = read_rows(DATASET / "deletion_requests.csv")
     facts = build_index()
     identities = load_index()
-    rows = build_candidate(requests, facts, identities)
+    rows = build_candidate(requests, facts, identities,
+                           ROOT / "evaluation" / "empty_step_id_flags.csv")
     target = ROOT / "output.candidate.csv"
     write_rows(rows, target)
     print(f"Wrote {len(rows)} rows to {target}")

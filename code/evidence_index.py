@@ -155,8 +155,27 @@ def object_facts(obj: Any, file_id: str, captured_at: str, fallback: str, parent
             result.append({"file_id": file_id, "captured_at": captured_at, "system": system_value(obj, fallback),
                            "resource_ids": [], "identifiers": {k: sorted(v) for k, v in identifiers.items()},
                            "attributes": attributes})
+        child_facts = []
         for key, value in obj.items():
-            result.extend(object_facts(value, file_id, captured_at, fallback, key))
+            child_facts.extend(object_facts(value, file_id, captured_at, fallback, key))
+        if resources and result:
+            # Nested payloads (for example a SQL row's record_json/document) are
+            # part of the enclosing resource. Carry their identifiers back to that
+            # resource, but never across a different explicit resource ID.
+            for fact in result:
+                resource = (fact.get("resource_ids") or [""])[0]
+                related = [child for child in child_facts
+                           if not child.get("resource_ids")
+                           or child.get("resource_ids") == [resource]]
+                merged_ids = {k: set(v) for k, v in fact.get("identifiers", {}).items()}
+                merged_attrs = dict(fact.get("attributes", {}))
+                for child in related:
+                    for field, values in child.get("identifiers", {}).items():
+                        merged_ids.setdefault(field, set()).update(values)
+                    merged_attrs.update(child.get("attributes", {}))
+                fact["identifiers"] = {k: sorted(v) for k, v in merged_ids.items()}
+                fact["attributes"] = merged_attrs
+        result.extend(child_facts)
     elif isinstance(obj, list):
         for value in obj:
             result.extend(object_facts(value, file_id, captured_at, fallback, parent))
@@ -351,7 +370,7 @@ def build_index(overlay_path: Path | None = None) -> list[dict[str, Any]]:
     facts: list[dict[str, Any]] = []
     for entry in read_manifest():
         path = DATASET / entry["file_path"]
-        digest = hashlib.sha256(b"evidence-facts-v20\0" + path.read_bytes()).hexdigest()
+        digest = hashlib.sha256(b"evidence-facts-v21\0" + path.read_bytes()).hexdigest()
         cache_path = CACHE / f"{digest}.json"
         if cache_path.exists():
             parsed = json.loads(cache_path.read_text(encoding="utf-8"))

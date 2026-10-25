@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import csv
 from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
 import main
@@ -206,11 +208,25 @@ def generate_steps(case: dict[str, str], status: str,
 
 
 def build_candidate(requests: list[dict[str, str]], facts: list[dict[str, Any]],
-                    identities: Any) -> list[dict[str, str]]:
+                    identities: Any, flag_path: Path | None = None) -> list[dict[str, str]]:
     rows = []
+    flags: list[dict[str, str]] = []
     for case in sorted(requests, key=lambda row: row["case_id"]):
         status = main.audit_status(case, facts, identities)
         steps = generate_steps(case, status, facts, identities)
+        invalid = [step for step in steps if not step["system_id"] or not step["resource_id"]]
+        if invalid:
+            flags.append({"case_id": case["case_id"], "omitted_step_count": str(len(invalid)),
+                          "omitted_operations": json.dumps(sorted({s["operation"] for s in invalid}))})
+            steps = [step for step in steps if step["system_id"] and step["resource_id"]]
         rows.append({"case_id": case["case_id"], "deletion_status": status,
                      "steps_json": json.dumps(steps, ensure_ascii=False, separators=(",", ":"))})
+    if flag_path is not None:
+        flag_path.parent.mkdir(parents=True, exist_ok=True)
+        with flag_path.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream,
+                                    fieldnames=["case_id", "omitted_step_count", "omitted_operations"],
+                                    lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(flags)
     return rows

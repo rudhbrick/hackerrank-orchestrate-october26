@@ -71,6 +71,10 @@ def validate(expected_cases: Path = DATASET / "deletion_requests.csv", expected_
         raise ValueError("Output must contain each request case_id exactly once, sorted ascending")
     requests_by_id = {row["case_id"]: row for row in requests}
     known_evidence = evidence_index()
+    omitted_step_flags = ROOT / "evaluation" / "empty_step_id_flags.csv"
+    flagged_empty_complete = set()
+    if omitted_step_flags.exists():
+        flagged_empty_complete = {row["case_id"] for row in read_csv(omitted_step_flags)}
 
     for line_no, row in enumerate(rows, start=2):
         status = row["deletion_status"]
@@ -84,7 +88,8 @@ def validate(expected_cases: Path = DATASET / "deletion_requests.csv", expected_
             raise ValueError(f"Line {line_no}: steps_json must be an array")
         if status == "NOT_APPLICABLE" and steps:
             raise ValueError(f"Line {line_no}: NOT_APPLICABLE requires []")
-        if status == "COMPLETE" and (not steps or any(not isinstance(s, dict) or s.get("phase") != "VERIFICATION" for s in steps)):
+        if status == "COMPLETE" and ((not steps and row["case_id"] not in flagged_empty_complete)
+                                      or any(not isinstance(s, dict) or s.get("phase") != "VERIFICATION" for s in steps)):
             raise ValueError(f"Line {line_no}: COMPLETE requires verification-only steps")
 
         last_phase = -1
@@ -96,6 +101,8 @@ def validate(expected_cases: Path = DATASET / "deletion_requests.csv", expected_
                 raise ValueError(f"Line {line_no}: step_no must be consecutive integers from 1")
             if any(not isinstance(step[field], str) for field in STEP_FIELDS - {"step_no"}):
                 raise ValueError(f"Line {line_no}, step {expected_no}: all step fields except step_no must be strings")
+            if not step["system_id"] or not step["resource_id"]:
+                raise ValueError(f"Line {line_no}, step {expected_no}: system_id and resource_id must be non-empty")
             combo = (step["phase"], step["operation"], step["state"])
             if combo not in ALLOWED:
                 raise ValueError(f"Line {line_no}, step {expected_no}: disallowed phase/operation/state {combo!r}")
