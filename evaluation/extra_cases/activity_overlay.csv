@@ -1,0 +1,2 @@
+activity_id,event_time,event_type,source_system,target_system,resource_id,reported_result,details
+activity_extra_01,2026-09-06T11:00:00Z,DELETE_RECORD,deletion_worker,account_service,account_8858,SUCCESS,Deletion worker reported successful deletion for user_id=user_542; name=Kofi Addo; email=addo.kofi@gmail.com; phone=+233 24 991 1328; email_hash=4f4b9c98a05a2dad20e52313cce7809d18c3da544754dcd46d728b0173174b26. Target resource: account_8858.

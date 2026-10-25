@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import argparse
 import json
 from pathlib import Path
 
@@ -51,18 +52,19 @@ def evidence_index() -> dict[str, dict[str, str]]:
     return result
 
 
-def validate() -> int:
-    requests = read_csv(DATASET / "deletion_requests.csv")
+def validate(expected_cases: Path = DATASET / "deletion_requests.csv", expected_rows: int = 518,
+             output_path: Path = OUTPUT) -> int:
+    requests = read_csv(expected_cases)
     expected_ids = sorted(row["case_id"] for row in requests)
-    if len(expected_ids) != 518 or len(set(expected_ids)) != 518:
-        raise ValueError("deletion_requests.csv must contain exactly 518 unique cases")
-    with OUTPUT.open(encoding="utf-8-sig", newline="") as f:
+    if len(expected_ids) != expected_rows or len(set(expected_ids)) != expected_rows:
+        raise ValueError(f"{expected_cases.name} must contain exactly {expected_rows} unique cases")
+    with output_path.open(encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         if reader.fieldnames != HEADER:
             raise ValueError(f"Expected columns {HEADER!r} in order; got {reader.fieldnames!r}")
         rows = list(reader)
-    if len(rows) != 518:
-        raise ValueError(f"Expected exactly 518 output rows; found {len(rows)}")
+    if len(rows) != expected_rows:
+        raise ValueError(f"Expected exactly {expected_rows} output rows; found {len(rows)}")
     ids = [row["case_id"] for row in rows]
     if ids != expected_ids:
         raise ValueError("Output must contain each request case_id exactly once, sorted ascending")
@@ -117,8 +119,16 @@ def validate() -> int:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Validate output.csv against a request case file")
+    parser.add_argument("--expected-cases", type=Path, default=DATASET / "deletion_requests.csv",
+                        help="CSV containing the expected case_id values")
+    parser.add_argument("--expected-rows", type=int, default=518,
+                        help="Expected number of output and request rows (default: 518)")
+    parser.add_argument("--output", type=Path, default=OUTPUT,
+                        help="Prediction CSV to validate (default: output.csv)")
+    args = parser.parse_args()
     try:
-        count = validate()
+        count = validate(args.expected_cases, args.expected_rows, args.output)
     except (OSError, ValueError) as exc:
         raise SystemExit(f"INVALID: {exc}") from exc
     print(f"Valid output: {count} cases; schema, status, steps, phase order, and evidence-time checks passed")

@@ -1,0 +1,4 @@
+case_id,email,requested_at,reported_status,reported_at,audit_at,request_text
+extra_01,leila.haddad@yahoo.com,2026-08-27T14:17:00Z,COMPLETE,2026-08-28T09:03:00Z,2026-09-08T13:40:00Z,I do not want my account deleted. Please send me a copy of all the data you hold about me.
+extra_02,nadia.ionescu@yahoo.com,2026-08-31T15:42:00Z,COMPLETE,2026-09-02T10:08:00Z,2026-09-18T12:25:00Z,I used this Yahoo address before changing the email on my account. Please remove records linked to both the old and current addresses.
+extra_03,a.eze08@gmail.com,2026-08-31T15:42:00Z,COMPLETE,2026-09-06T12:00:00Z,2026-09-15T12:00:00Z,"I no longer need this account. Please remove my name and contact details, but keeping an internal deleted-account reference is fine if other required records still depend on it."
